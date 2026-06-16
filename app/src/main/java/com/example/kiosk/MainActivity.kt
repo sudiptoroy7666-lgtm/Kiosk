@@ -1,8 +1,9 @@
 package com.example.kiosk
-
+import android.content.IntentFilter // <-- ADD THIS IMPORT
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -36,10 +37,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Attempt to enter kiosk mode automatically when app resumes
-        enterKioskMode()
+
+    // REMOVE the old onResume() function entirely
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Only lock the device when the app actually has focus and is fully drawn
+        if (hasFocus) {
+            enterKioskMode()
+        }
     }
 
     private fun enterKioskMode() {
@@ -47,10 +53,28 @@ class MainActivity : ComponentActivity() {
             val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
             val adminName = ComponentName(this, MyAdminReceiver::class.java)
 
-            // Authorize this app for LockTask
+            // 1. Authorize this app for LockTask
             dpm.setLockTaskPackages(adminName, arrayOf(packageName))
 
-            // Enter Kiosk Mode
+            // 2. FORCE our app to be the absolute default HOME screen (No prompts)
+            val intentFilter = IntentFilter(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addCategory(Intent.CATEGORY_DEFAULT)
+            }
+            dpm.addPersistentPreferredActivity(
+                adminName,
+                intentFilter,
+                ComponentName(this, MainActivity::class.java)
+            )
+
+            // 3. HIDE the default Android Launcher so it can't draw over us on boot!
+            try {
+                dpm.setApplicationHidden(adminName, "com.android.launcher3", true)
+            } catch (e: Exception) {
+                // Ignore if the specific emulator uses a different launcher package name
+            }
+
+            // 4. Enter Kiosk Mode
             startLockTask()
         } catch (e: Exception) {
             e.printStackTrace()
